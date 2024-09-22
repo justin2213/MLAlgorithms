@@ -1,106 +1,72 @@
-from sklearn.metrics import confusion_matrix, classification_report
-from pathlib import Path
+from sklearn.svm import SVC
+from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
-import numpy as np
-from sklearn import svm, metrics, datasets
-from sklearn.utils import Bunch
-from sklearn.model_selection import GridSearchCV, train_test_split
-from skimage.io import imread
-from skimage.transform import resize
 import seaborn as sns
 
+from sklearn.metrics import confusion_matrix,  roc_curve, auc 
+from sklearn.metrics import classification_report
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.manifold import TSNE
+
+import numpy as np
+
+import os 
+import cv2
+import numpy as np
 
 
-def load_image_files(container_path, dimension=(1024, 1024), max_images_per_class = 500):
-    """
-    Load a limited number of image files with categories as subfolder names 
-    which performs like scikit-learn sample dataset
-    
-    Parameters
-    ----------
-    container_path : string or unicode
-        Path to the main folder holding one subfolder per category
-    dimension : tuple
-        size to which images are adjusted to
-    max_images_per_class : int
-        Maximum number of images to load per class
-        
-    Returns
-    -------
-    Bunch
-    """
-    image_dir = Path(container_path)
-    folders = [directory for directory in image_dir.iterdir() if directory.is_dir()]
-    categories = [folder.name for folder in folders]
-
-    descr = "A image classification dataset"
+def load_images(dir,limit=100):
     images = []
-    flat_data = []
-    target = []
-    
-    for i, direc in enumerate(folders):
-        count = 0  # Counter to limit number of images per class
-        for file in direc.iterdir():
-            if count >= max_images_per_class:
-                break  # Stop if we've reached the limit for this class
-            img = imread(file)
-            img_resized = resize(img, dimension, anti_aliasing=True, mode='reflect')
-            flat_data.append(img_resized.flatten()) 
-            images.append(img_resized)
-            target.append(i)
-            count += 1  # Increment the counter
-            print(count, i)
-        
-    flat_data = np.array(flat_data)
-    target = np.array(target)
-    images = np.array(images)
+    labels = []
+    for root, dirs, files in os.walk(dir):
+        for file in files[0:limit]:
+            if file.endswith('.jpg'):
+                image_path = os.path.join(root, file)
+                image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+                
+                image = cv2.resize(image, None, fx=0.0625, fy=0.0625)
+                print(image.shape)
 
-    return Bunch(data=flat_data,
-                 target=target,
-                 target_names=categories,
-                 images=images,
-                 DESCR=descr)
-
-param_grids = [
-    {'C': [1, 10, 100, 1000], 'kernel': ['linear']},
-    {'C': [1, 10, 100, 1000], 'gamma': [0.001, 0.0001], 'kernel': ['rbf']},
-    {'C': [1, 10, 100, 1000], 'gamma': [0.001, 0.0001], 'coef0': [0, 1, 10], 'kernel': ['sigmoid']}
-]
-image_dataset = load_image_files('/home/datasets/spark22-dataset/train')
-X_train, X_test, y_train, y_test = train_test_split(
-    image_dataset.data, image_dataset.target, test_size=0.3, random_state=109)
-
-for grid in param_grids:
-    print(grid)
-    svc = svm.SVC(random_state=42)
+                images.append(np.reshape(image,(-1,)))
+                
+                labels.append(root.split("/")[-1])
     
-    # Perform GridSearchCV with the kernel
-    clf = GridSearchCV(svc, grid, cv=5)
-    clf.fit(X_train, y_train)
-    
-    # Predict the labels for the test set
-    y_pred = clf.predict(X_test)
-    
-    # Compute confusion matrix
-    cm = confusion_matrix(y_test, y_pred)
-    
-    # Save confusion matrix as a heatmap
-    plt.figure(figsize=(10, 7))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                xticklabels=image_dataset.target_names,
-                yticklabels=image_dataset.target_names)
-    plt.xlabel('Predicted')
-    plt.ylabel('True')
-    plt.title('Confusion Matrix')
-    
-    # Save the plot to a file
-    plt.savefig(f'confusion_matrix_{grid["kernel"][0]}.png')
-    plt.close()  # Close the figure after saving
+    return np.vstack(images), labels
 
-    # Save classification report to a text file
-    report = classification_report(y_test, y_pred, target_names=image_dataset.target_names)
-    with open(f'classification_report_{grid["kernel"][0]}.txt', 'w') as f:
-        f.write(report)
 
-    print(f"Results saved for kernel: {grid['kernel'][0]}")
+kernals = ['rbf', 'linear', 'poly',  'sigmoid']
+num_images = 1000
+X, y = load_images("/home/datasets/spark22-dataset",num_images)
 
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+
+svms    = {}
+results = {}
+metrics = {}
+for kernal in kernals:
+    print(kernal)
+    svms[kernal] = make_pipeline(StandardScaler(), SVC(gamma='auto', kernel=kernal,verbose=2))
+    svms[kernal] = svms[kernal].fit(X_train,y_train)
+    results[kernal]= svms[kernal].predict(X_test)
+    metrics[kernal] = classification_report(y_true=y_test,y_pred=results[kernal])
+   
+    with open(f"{kernal}_metric.txt", "w") as f:
+            # Write some text to the file
+            f.write(str(metrics[kernal]))
+
+
+    cm = confusion_matrix(y_test, results[kernal])
+
+    # Create a heatmap using Seaborn
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+    plt.title(f'Confusion Matrix: {kernal}')
+    plt.xlabel('Predicted') 
+
+    plt.ylabel('Actual')
+
+    # Save the image
+    plt.savefig(f'{kernal}_confusion_matrix.png')
+    plt.clf()
