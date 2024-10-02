@@ -37,7 +37,7 @@ def save_conf_mat(y_true, y_pred, name):
     plt.clf()
 
 # Load images and labels
-num_images = 10000  # Use more images for training if possible
+num_images = 10000  
 X, y = load_images("/home/datasets/spark22-dataset", num_images)
 
 y= np.array(y)
@@ -48,8 +48,10 @@ print(X.shape)
 label_encoder = OneHotEncoder(sparse_output=False)
 y = label_encoder.fit_transform(y)
 
+# Split into training and testing sets
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
+# Number of image classes
 num_classes = 11
 
 model = Sequential([
@@ -63,7 +65,10 @@ model.compile(optimizer='adam',
     loss='categorical_crossentropy',
     metrics=['accuracy'])
 
+# Fit the model on the training data
 model.fit(X_train, y_train, epochs=10)
+
+
 # Evaluate the model
 loss, accuracy = model.evaluate(X_test, y_test)
 print(f'Test Accuracy: {accuracy:.4f}')
@@ -80,6 +85,3 @@ with open("resnet_metrics.txt", "w") as f:
     f.write(str(metrics))
 
 save_conf_mat(y_true, y_pred_classes, name="resnet")
-
-# Optionally, print out the classification report
-print(metrics)
