@@ -17,35 +17,33 @@ def load_images(dir, limit=100):
             if file.endswith('.jpg'):
                 image_path = os.path.join(root, file)
                 image = cv2.imread(image_path, cv2.IMREAD_COLOR)
-                image = cv2.resize(image, (256, 256))  # Resize to 128x128
-                images.append(image.flatten())  # Flatten the image
+                image = cv2.resize(image, (256, 256)) 
+                images.append(image.flatten()) 
                 print(image.shape)
-                labels.append(root.split("/")[-1])  # Use folder name as label
+                labels.append(root.split("/")[-1])
     
-    return np.array(images), labels  # Return as a NumPy array
+    return np.array(images), labels  
 
 def save_conf_mat(y_true, y_pred, name):
     cm = confusion_matrix(y_true, y_pred)
-    # Create a heatmap using Seaborn
     plt.figure(figsize=(8, 6))
 
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
     plt.title(f'Confusion Matrix: {name}')
     plt.xlabel('Predicted') 
     plt.ylabel('Actual')
-    # Save the image
+
     plt.savefig(f'{name}_confusion_matrix.png')
     plt.clf()
 
 # Load images and labels
-num_images = 10000  # Use more images for training if possible
+num_images = 200
 X, y = load_images("/home/datasets/spark22-dataset", num_images)
 
 # Convert string labels to numeric values
 label_encoder = LabelEncoder()
 y = label_encoder.fit_transform(y)
 
-# Define the pipeline without PCA
 pipeline = make_pipeline(
     StandardScaler(),  # Normalize the data
     XGBClassifier(random_state=42),  # XGBoost classifier
@@ -69,6 +67,3 @@ with open(f"xgb_metrics.txt", "w") as f:
     f.write(str(metrics))
 
 save_conf_mat(y_test, y_pred, name="xgb")
-
-# Optionally, print out the classification report
-print(metrics)
